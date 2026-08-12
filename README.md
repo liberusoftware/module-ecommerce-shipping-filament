@@ -1,84 +1,120 @@
-# Ecommerce: Shipping Filament
+# liberusoftware/ecommerce-shipping-filament
 
-> This optional Filament 5 presentation package presents exactly one independent domain module. It contributes reusable resources, pages, widgets, schemas, tables, infolists, and actions to application-owned panels while delegating authorization, validation, tenancy, persistence, and business rules to the ecommerce-shipping public boundary. It must
+The Filament 5 operator surface for [`liberusoftware/ecommerce-shipping`](https://github.com/liberusoftware/module-ecommerce-shipping).
 
-[Software](https://liberusoftware.com) ·
-[Hosting](https://liberuhosting.com) ·
-[Services](https://liberuservices.com) ·
-[Liberu Group](https://liberugroup.com)
+> **Shipping owns what a shipment costs and how long it is expected to take. It owns no
+> order, no parcel's contents, no label, and no package in motion.**
+>
+> Draw the line at *the moment of purchase*: shipping answers "what will this cost and how
+> long will it take", and everything after the buyer says yes belongs to Fulfillment.
 
-![PHP](https://img.shields.io/badge/PHP-8.5-777BB4?logo=php&logoColor=white) ![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white) ![Filament](https://img.shields.io/badge/Filament-5-FDAE4B)
-[![Latest release](https://img.shields.io/github/v/release/liberusoftware/module-ecommerce-shipping-filament?sort=semver)](https://github.com/liberusoftware/module-ecommerce-shipping-filament/releases/latest) [![Tests](https://github.com/liberusoftware/module-ecommerce-shipping-filament/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/liberusoftware/module-ecommerce-shipping-filament/actions/workflows/tests.yml)
+This package adds no rule of its own. It is where an operator **authors** the rules the
+domain enforces, and where they **read** the prices it recorded.
 
-## Features
+## What this is
 
-- Fully compatible with **Laravel 13**, **PHP 8.5**, and **Pest 5**.
-- Built following the domain-driven design guidelines of the Liberu architecture.
-- Reusable, presenting a clean public contract and boundaries.
-- Adheres to the strict database, security, and authorization standards of Liberu.
+| Surface | Purpose |
+|---|---|
+| `ZoneResource` | Destination zones and their territories. Overlap at equal precedence is refused as form validation. |
+| `ServiceLevelResource` | What the host called a "shipping method". A rate prices one of these in one zone. |
+| `RateResource` | Flat and table rates, their bands, and the free-shipping threshold. A band set that does not tile its axis is refused as form validation. |
+| `RestrictionResource` | Exclusions, each carrying the reason a buyer is shown. |
+| `ShippingPriceResource` | Recorded prices. **Read-only through every ability**, with an adjustments relation manager that is equally read-only. |
+| `RatePreview` page | "What would this destination be offered, and why." Runs the real quote and records nothing. |
+| `ShippingCoverageOverview` widget | The operator faults worth seeing without going looking: an active zone with nothing priced in it, and whether live carrier rating is on. |
 
-## Requirements
+## Installation
 
-- **PHP 8.5**
-- **Composer 2**
-- A supported database (e.g. MySQL, PostgreSQL, SQLite)
+This package ships **no** `extra.laravel.providers`. Installing it boots nothing; the host's
+`ModuleManagerServiceProvider` enables it by name. See [docs/adoption.md](docs/adoption.md).
 
-## Quick start
+Attach the plugin to whichever panel should carry the surface:
 
-To install this package via Composer, run:
+```php
+use Liberu\Ecommerce\Shipping\Filament\ShippingFilamentPlugin;
 
-```bash
-composer require liberusoftware/module-ecommerce-shipping-filament
+public function panel(Panel $panel): Panel
+{
+    return $panel->plugins([ShippingFilamentPlugin::make()]);
+}
 ```
+
+## The two write-time refusals this surface owns
+
+The domain refuses an ambiguous zone overlap and a band set that fails to tile its axis, at
+write time, because **ordering resolved at read time is ordering nobody can audit**. Those
+refusals are raised where they are authored — here — so they arrive as form validation with
+the conflicting row named, never as a 500 from an uncaught domain exception:
+
+- `ZoneOverlapsExistingZone` → an error on the **precedence** field naming both zone codes
+  and the precedence they collide at.
+- `RateBandsDoNotTileAxis` → an error on the **bands** repeater naming the axis and the exact
+  pair of bounds that gap or overlap.
+
+## Recorded prices are read-only, and the enforcement is not a comment
+
+`isReadOnly()` is a `RelationManager` **instance** method. Declaring it on a `Resource`
+enforces nothing at all. `ShippingPriceResource` overrides `getAuthorizationResponse()` —
+the single funnel every `can*()` and `authorize*()` passes through — and denies every
+ability outside `viewAny` and `view`.
+
+The suite proves it the only way that means anything: it installs
+`Gate::before(fn () => true)`, **asserts the gate answers yes**, and then asserts
+`canEdit`, `canDelete` and `canCreate` are still false. A test without that middle assertion
+proves only that nothing granted the ability in the first place.
+
+Every model is mapped to a policy that answers all eighteen abilities by name. A model with
+no policy is exposed, not safe: Laravel's unanswered gate is permissive, Filament's
+`get_authorization_response()` returns **allow** when a policy that exists lacks the method
+asked about, and `associate`/`dissociate` are live on a `hasMany` and default open.
+
+## Three carrier outcomes, never one empty list
+
+The host returned `[]` for live rating being switched off, for the carrier being down, and
+for the carrier not serving the address — then silently billed a flat rate in all three
+cases. The preview renders four visibly different states:
+
+| Outcome | What it says |
+|---|---|
+| not bound | Live carrier rating is switched off. A supported configuration, **not an error**. |
+| bound, threw | The carrier is unavailable **right now**, with the reason. Derived rates only, and degraded. |
+| bound, answered with nothing | The carrier **does not serve this destination**. A settled fact, not an outage. |
+| bound, answered with rates | Recorded verbatim with provenance, because a quoted price is irreproducible. |
+
+## Four quote outcomes, and one of them is your fault
+
+`no_rates_configured` — a zone matched and nothing is priced in it — is an **operator**
+fault, and this is the operator surface. It gets its own words, names the zone, and says
+what to do about it. It is not the same message as "no zone covers this destination", and
+the widget counts it so you find out before a buyer does.
+
+## Money, weight and distance
+
+Money is integer minor units everywhere; the form takes a decimal string and converts it
+with string arithmetic, because `(int) (19.99 * 100)` is `1998`. Weight is integer grams,
+dimensions integer millimetres, percentages integer basis points. There is no unit selector
+anywhere in this package, and no distance: a zone is a set of destination predicates, never
+a radius.
+
+An estimate is an integer transit-day range plus its basis. **This module does not compute a
+delivery date** — that needs a ship date, a cut-off time and a holiday calendar it does not
+own.
+
+## What this replaces
+
+The host at `ecommerce-laravel` offered every shipping method to every address on earth at
+the same price, threw the destination away, priced in floats, disagreed with itself about
+weight units three ways, accepted free-text delivery estimates, deleted the evidence for a
+charged price on a schedule, and collapsed every carrier failure mode into one empty array.
+The domain package documents all twelve faults; this package is where the replacement for
+the first four is authored and the replacement for the last one is seen.
 
 ## Documentation
 
-- [Liberu Main Documentation](https://github.com/liberusoftware/documentation)
-- [Architecture & Standards Index](https://github.com/liberusoftware/documentation/tree/main/architecture)
+- [docs/domain.md](docs/domain.md) — what this surface owns, and its known limits
+- [docs/adoption.md](docs/adoption.md) — installing it into a host
+- [docs/runbook.md](docs/runbook.md) — the operator's actual jobs
 
-## Related Liberu Projects
+## Licence
 
-| Project | Repository | Purpose |
-| --- | --- | --- |
-| **Boilerplate** | [liberusoftware/boilerplate-laravel](https://github.com/liberusoftware/boilerplate-laravel) | Shared Laravel application foundation and reference composition |
-| **CMS** | [liberu-cms/cms-laravel](https://github.com/liberu-cms/cms-laravel) | Structured content, publishing, media, multisite, and headless delivery |
-| **CRM** | [liberu-crm/crm-laravel](https://github.com/liberu-crm/crm-laravel) | Customer data, sales, marketing, service, and customer success |
-| **Billing** | [liberu-billing/billing-laravel](https://github.com/liberu-billing/billing-laravel) | Products, subscriptions, invoicing, payments, and provisioning |
-| **Accounting** | [liberu-accounting/accounting-laravel](https://github.com/liberu-accounting/accounting-laravel) | Ledgers, banking, tax, expenses, close, and financial reporting |
-| **Ecommerce** | [liberu-ecommerce/ecommerce-laravel](https://github.com/liberu-ecommerce/ecommerce-laravel) | Catalog, checkout, orders, fulfillment, returns, B2B, and omnichannel commerce |
-| **Control Panel** | [liberu-control-panel/control-panel-laravel](https://github.com/liberu-control-panel/control-panel-laravel) | Hosting, infrastructure, DNS, mail, databases, backups, and security operations |
-| **Automation** | [liberu-automation/automation-laravel](https://github.com/liberu-automation/automation-laravel) | Governed workflows, provider-neutral AI, approvals, and connectors |
-
-## Security
-
-Please do not report security vulnerabilities through public GitHub issues.
-Follow our [Security Policy](https://github.com/liberusoftware/documentation/blob/main/architecture/SECURITY.md) for private reporting and supported versions.
-
-## License
-
-This project is open-source software. You may use, modify, and distribute it
-under the terms described in [LICENSE.md](LICENSE.md).
-
-The linked license text is authoritative; this summary is not legal advice.
-
-## Feedback and contributing
-
-Feedback and contributions are welcome. You can help by reporting reproducible
-bugs, proposing focused enhancements, improving documentation or translations,
-and submitting tested code changes.
-
-Before contributing, please read [CONTRIBUTING.md](https://github.com/liberusoftware/documentation/blob/main/standards/CONTRIBUTING.md) and our
-[Code of Conduct](https://github.com/liberusoftware/documentation/blob/main/architecture/CODE_OF_CONDUCT.md). Search existing issues first, then use
-the appropriate issue template. Pull requests should explain the problem and
-approach, remain focused, include or update tests, pass the required workflows,
-and document user-visible or breaking changes.
-
-## Contributors
-
-Thank you to everyone who helps improve Liberu.
-
-<a href="https://github.com/liberusoftware/module-ecommerce-shipping-filament/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=liberusoftware/module-ecommerce-shipping-filament" alt="Contributors to liberusoftware/module-ecommerce-shipping-filament">
-</a>
-
-[View the full contributors graph](https://github.com/liberusoftware/module-ecommerce-shipping-filament/graphs/contributors).
+MIT. See [LICENSE.md](LICENSE.md).

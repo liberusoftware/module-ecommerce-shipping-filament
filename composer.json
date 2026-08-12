@@ -1,0 +1,51 @@
+{
+    "name": "liberusoftware/ecommerce-shipping-filament",
+    "description": "Filament 5 operator surface for Liberu Ecommerce Shipping: zone, rate, band and restriction authoring, read-only recorded prices, and a rate preview.",
+    "type": "liberu-module",
+    "license": "MIT",
+    "version": "0.1.0",
+    "keywords": ["laravel", "filament", "ecommerce", "shipping", "liberu"],
+    "require": {
+        "php": "^8.5",
+        "filament/filament": "^5.6",
+        "illuminate/auth": "^13.0",
+        "illuminate/contracts": "^13.0",
+        "illuminate/database": "^13.0",
+        "illuminate/support": "^13.0",
+        "illuminate/validation": "^13.0",
+        "liberusoftware/ecommerce-shipping": "^0.1"
+    },
+    "require-dev": {
+        "liberusoftware/package-testbench": "^1.7",
+        "pestphp/pest": "^5.0"
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/liberusoftware/module-ecommerce-shipping"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Liberu\\Ecommerce\\Shipping\\Filament\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Liberu\\Ecommerce\\Shipping\\Filament\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "liberu": {
+            "name": "ecommerce-shipping-filament"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

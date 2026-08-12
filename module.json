@@ -1,0 +1,28 @@
+{
+    "name": "ecommerce-shipping-filament",
+    "display_name": "Shipping Administration",
+    "description": "The operator surface for shipping: where zones, rates, bands and restrictions are authored, and where recorded prices are read.",
+    "version": "0.1.0",
+    "provider": "Liberu\\Ecommerce\\Shipping\\Filament\\ShippingFilamentServiceProvider",
+    "category": "presentation",
+    "features": [
+        "Zone authoring that refuses an ambiguous overlap as form validation naming the conflicting zone",
+        "Table-rate band authoring that refuses a gap, an overlap or a missing unbounded top band",
+        "Restriction authoring with the recorded reason a buyer will be shown",
+        "Recorded prices are read-only through every ability, enforced at the authorization funnel",
+        "Rate preview that records nothing and names the operator fault when a zone has no priced rate",
+        "Live carrier rating rendered as three distinguishable outcomes, never one empty list"
+    ],
+    "requires": {
+        "packages": {
+            "liberusoftware/ecommerce-shipping": "^0.1"
+        }
+    },
+    "presentation": {
+        "filament": {
+            "admin": [
+                "Liberu\\Ecommerce\\Shipping\\Filament\\ShippingFilamentPlugin"
+            ]
+        }
+    }
+}
